@@ -1,23 +1,40 @@
 local phase = 0
+local zoom = 0
+local speed = 15
+local pmousex, pmousey = 0, 0
 local positions = {} --The first value is f(0), followed by f(1)... to f(t-1).
-local vectors = 200 -- Number of clockwise rotating vectors
+local vectors = 40 -- Number of clockwise rotating vectors
 local xcoeffs, ycoeffs = {}, {}
 local k = 0 -- Time simulated
+local firsttransform = love.math.newTransform()
+local secondtransform = love.math.newTransform()
 function love.load()
   love.window.setFullscreen(true)
 end
 function love.draw()
+  --Transforms
+  local circlesize = 3
+  if zoom == 0 then
+    love.graphics.setLineWidth(1)
+  elseif zoom == 1 then
+    love.graphics.setLineWidth(0.5)
+    love.graphics.applyTransform(firsttransform)
+    circlesize = 2
+  else
+    love.graphics.setLineWidth(0.025)
+    love.graphics.applyTransform(secondtransform)
+    circlesize = 0.15
+  end
   love.graphics.clear()
   local t = table.getn(positions)/2
   if t >= 3 then
     love.graphics.setColor(1, 1, 0)
-    love.graphics.polygon("line", positions)
+    love.graphics.line(positions)
   end
   --Unfortunately most of this math does have to be done right before drawing things
   if phase >= 2 then
     local x = 0
     local y = 0
-    k = k + 1
     local base_angle = 2 * math.pi * k / t
     for n = 0, 2 * vectors do -- n=-vectors, vectors does things in the wrong order
       local real_n = 0 -- the actual vector frequency
@@ -35,28 +52,43 @@ function love.draw()
         love.graphics.line(px, py, x, y)
       end
     end
+    love.graphics.setColor(0, 1, 1)
+    love.graphics.circle("fill", x, y, circlesize)
+    --Transforms
+    local width, height = love.window.getMode()
+    firsttransform:setTransformation(width / 2 - x * 2, height / 2 - y * 2, 0, 2, 2)
+    secondtransform:setTransformation(width / 2 - x * 40, height / 2 - y * 40, 0, 40, 40)
   end
 end
 function love.update(dt)--TODO: use dt or only measure when the mouse has moved far away enough.
   if phase == 1 then
     local x, y = love.mouse.getPosition()
+    pmousex, pmousey = x, y
     table.insert(positions, x)
     table.insert(positions, y)
+  elseif phase >= 2 then
+    k = k + (dt * speed / (zoom + 1))
   end
 end
 function love.mousepressed(x, y, button)
   if button == 1 then -- button = 1 means that the primary mouse button was pressed
     phase = phase + 1
     if phase == 1 then
-      table.insert(positions, x)
-      table.insert(positions, y)
+      if not (x == pmousex and y == pmousey) then
+        table.insert(positions, x)
+        table.insert(positions, y)
+        pmousex, pmousey = x, y
+      end
     elseif phase == 2 then
-      xcoeffs, ycoeffs = calculate()
-      for n=-vectors, vectors do
-        io.write("x_", n, " = ", xcoeffs[n], ",     ")
-        io.write("y_", n, " = ", ycoeffs[n], "\n")
+      if table.getn(positions) >= (5 * vectors / 2) then
+        xcoeffs, ycoeffs = calculate()
+      else
+        phase = 1
       end
     end
+  elseif button == 2 and phase == 2 then
+    zoom = zoom + 1
+    if zoom == 3 then zoom = 0 end
   end
 end
 function love.keypressed(button)
